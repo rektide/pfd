@@ -10,8 +10,12 @@ pub async fn run() -> Result<()> {
 
     tracing::debug!("pfc starting with command: {}", cli.command);
 
-    // TODO: Discover socket
-    // TODO: Serialize execution context
+    let ctx = execution::ExecutionContext::new(cli.command, cli.args);
+    tracing::debug!("Execution context: {:?}", ctx);
+
+    let socket_path = socket::discover_socket(cli.socket).await?;
+    tracing::info!("Using socket: {}", socket_path);
+
     // TODO: Connect to daemon
     // TODO: Transfer context and descriptors
 
