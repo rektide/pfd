@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["pfc", "discovery"]
+members = ["pfc", "discovery", "pfd"]
 
 [workspace.package]
 version = "0.1.0"
