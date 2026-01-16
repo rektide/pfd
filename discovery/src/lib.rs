@@ -4,6 +4,10 @@ pub trait DiscoveryStrategy {
     fn discover(&self) -> Option<String>;
 }
 
+pub trait CreateStrategy {
+    fn create(&self) -> String;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Visibility {
     Hidden,
@@ -75,6 +79,25 @@ impl DiscoveryStrategy for LocalFileStrategy {
         }
 
         None
+    }
+}
+
+impl CreateStrategy for LocalFileStrategy {
+    fn create(&self) -> String {
+        let socket_name = self
+            .socket_names
+            .as_ref()
+            .and_then(|v| v.first())
+            .map(|s| s.as_str())
+            .unwrap_or("pfd.sock");
+
+        let visibility = self.visibility.unwrap_or_default();
+
+        match visibility {
+            Visibility::Hidden => format!("./.{}", socket_name),
+            Visibility::NotHidden => format!("./{}", socket_name),
+            Visibility::Both => format!("./.{}", socket_name),
+        }
     }
 }
 
@@ -194,5 +217,35 @@ mod tests {
     #[test]
     fn test_visibility_default() {
         assert_eq!(Visibility::default(), Visibility::Both);
+    }
+
+    #[test]
+    fn test_create_strategy_not_hidden() {
+        let strategy = LocalFileStrategy::new()
+            .with_socket_names(vec!["test.sock".to_string()])
+            .with_visibility(Visibility::NotHidden);
+        assert_eq!(strategy.create(), "./test.sock");
+    }
+
+    #[test]
+    fn test_create_strategy_hidden() {
+        let strategy = LocalFileStrategy::new()
+            .with_socket_names(vec!["test.sock".to_string()])
+            .with_visibility(Visibility::Hidden);
+        assert_eq!(strategy.create(), "./.test.sock");
+    }
+
+    #[test]
+    fn test_create_strategy_both() {
+        let strategy = LocalFileStrategy::new()
+            .with_socket_names(vec!["test.sock".to_string()])
+            .with_visibility(Visibility::Both);
+        assert_eq!(strategy.create(), "./.test.sock");
+    }
+
+    #[test]
+    fn test_create_strategy_default() {
+        let strategy = LocalFileStrategy::default();
+        assert_eq!(strategy.create(), "./.pfd.sock");
     }
 }
