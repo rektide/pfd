@@ -1,9 +1,21 @@
-[package]
-name = "prefork-rs"
+[workspace]
+resolver = "3"
+members = ["pfc"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+authors = ["Prefork Developers"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/prefork/prefork-rs"
 
-[dependencies]
-directories = "6.0.0"
-fork = "0.6.0"
-sendfd = "0.4.4"
+[workspace.dependencies]
+clap = { version = "*", features = ["derive", "unicode", "wrap_help"] }
+anyhow = "*"
+thiserror = "*"
+tokio = { version = "*", features = ["rt-multi-thread", "macros", "fs", "net", "io-util"] }
+serde = { version = "*", features = ["derive"] }
+serde_json = "*"
+tracing = "*"
+tracing-subscriber = { version = "*", features = ["env-filter"] }
+directories = "*"
