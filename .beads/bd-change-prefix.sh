@@ -23,11 +23,22 @@ jq_script='
   (.dependencies[]?.depends_on_id |= sub("^'"$FROM_PREFIX"'-"; "'"$TO_PREFIX"'-"))
 '
 
-# Create backup
+# Create backup (will fail if exists)
 cp .beads/issues.jsonl .beads/issues.jsonl.bak
 
 # Apply changes (compact output)
 echo "$jq_script" | jq -c -R -f - .beads/issues.jsonl.bak > .beads/issues.jsonl
 
+# Update config.yaml with new prefix
+if [[ -f .beads/config.yaml ]]; then
+  sed -i.bak "s/^issue-prefix: \".*\"/issue-prefix: \"$TO_PREFIX\"/" .beads/config.yaml || \
+    sed -i.bak "s/# issue-prefix: \"\"/issue-prefix: \"$TO_PREFIX\"/" .beads/config.yaml
+  rm -f .beads/config.yaml.bak
+fi
+
+# Sync beads
+bd sync
+
 echo "Done. Backup saved to .beads/issues.jsonl.bak"
-echo "You may need to restart the beads daemon: pkill -f 'bd daemon'"
+echo "Updated config.yaml with new prefix: $TO_PREFIX"
+echo "Ran bd sync to reconcile state"
