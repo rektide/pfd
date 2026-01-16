@@ -56,10 +56,10 @@ jq_script='
 '
 
 # Apply changes (compact output)
-jq -c "$jq_script" .beads/issues.jsonl.bak > .beads/issues.jsonl
+jq -c "$jq_script" .beads/issues.jsonl.bak >.beads/issues.jsonl
 
 # Sync beads
-bd sync
+bd import -i .beads/issues.jsonl
 
 echo "Done. Backup saved to .beads/issues.jsonl.bak"
 echo "Ran bd sync to reconcile state"
