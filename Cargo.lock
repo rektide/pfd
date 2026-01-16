@@ -424,11 +424,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "context",
  "directories",
  "discovery",
+ "sendfd",
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
