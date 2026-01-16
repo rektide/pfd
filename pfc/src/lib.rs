@@ -19,7 +19,7 @@ pub fn run() -> Result<()> {
 
     let socket_path = discovery::discover_socket(DiscoveryConfig {
         socket_arg: cli.socket,
-        socket_env: "PFC_SOCKET".to_string(),
+        ..Default::default()
     })?;
     tracing::info!("Using socket: {}", socket_path);
 

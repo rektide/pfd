@@ -37,6 +37,50 @@ impl DiscoveryStrategy for EnvStrategy {
     }
 }
 
+pub struct DiscoveryConfig {
+    pub socket_arg: Option<String>,
+    pub socket_env: String,
+}
+
+impl Default for DiscoveryConfig {
+    fn default() -> Self {
+        Self {
+            socket_arg: None,
+            socket_env: "PFC_SOCKET".to_string(),
+        }
+    }
+}
+
+pub fn discover_socket(config: DiscoveryConfig) -> anyhow::Result<String> {
+    // Priority 1: CLI argument
+    if let Some(socket) = config.socket_arg {
+        return Ok(socket);
+    }
+
+    // Priority 2: Environment variable (try PFC_SOCKET first, then PFD_SOCKET)
+    let pfc_strategy = EnvStrategy {
+        env_var: "PFC_SOCKET".to_string(),
+    };
+    if let Some(socket) = pfc_strategy.discover() {
+        return Ok(socket);
+    }
+
+    let pfd_strategy = EnvStrategy {
+        env_var: "PFD_SOCKET".to_string(),
+    };
+    if let Some(socket) = pfd_strategy.discover() {
+        return Ok(socket);
+    }
+
+    // Priority 3: Local discovery
+    let local_strategy = LocalFileStrategy;
+    if let Some(socket) = local_strategy.discover() {
+        return Ok(socket);
+    }
+
+    Err(anyhow::anyhow!("No pfd socket found"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -69,32 +113,23 @@ mod tests {
         };
         assert_eq!(strategy.discover(), None);
     }
-}
 
-pub struct DiscoveryConfig {
-    pub socket_arg: Option<String>,
-    pub socket_env: String,
-}
-
-pub fn discover_socket(config: DiscoveryConfig) -> anyhow::Result<String> {
-    // Priority 1: CLI argument
-    if let Some(socket) = config.socket_arg {
-        return Ok(socket);
+    #[test]
+    fn test_discovery_socket_from_env() {
+        unsafe { std::env::set_var("PFC_SOCKET", "/tmp/pfc.sock") };
+        let config = DiscoveryConfig::default();
+        let result = discover_socket(config);
+        assert_eq!(result.unwrap(), "/tmp/pfc.sock");
+        unsafe { std::env::remove_var("PFC_SOCKET") };
     }
 
-    // Priority 2: Environment variable
-    let env_strategy = EnvStrategy {
-        env_var: config.socket_env.clone(),
-    };
-    if let Some(socket) = env_strategy.discover() {
-        return Ok(socket);
+    #[test]
+    fn test_discovery_socket_from_pfd_env() {
+        unsafe { std::env::remove_var("PFC_SOCKET") };
+        unsafe { std::env::set_var("PFD_SOCKET", "/tmp/pfd.sock") };
+        let config = DiscoveryConfig::default();
+        let result = discover_socket(config);
+        assert_eq!(result.unwrap(), "/tmp/pfd.sock");
+        unsafe { std::env::remove_var("PFD_SOCKET") };
     }
-
-    // Priority 3: Local discovery
-    let local_strategy = LocalFileStrategy;
-    if let Some(socket) = local_strategy.discover() {
-        return Ok(socket);
-    }
-
-    Err(anyhow::anyhow!("No pfd socket found"))
 }
