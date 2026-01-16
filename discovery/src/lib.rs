@@ -4,16 +4,76 @@ pub trait DiscoveryStrategy {
     fn discover(&self) -> Option<String>;
 }
 
-pub struct LocalFileStrategy;
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Visibility {
+    Hidden,
+    NotHidden,
+    Both,
+}
+
+impl Default for Visibility {
+    fn default() -> Self {
+        Self::Both
+    }
+}
+
+pub struct LocalFileStrategy {
+    pub socket_names: Option<Vec<String>>,
+    pub visibility: Option<Visibility>,
+}
+
+impl LocalFileStrategy {
+    pub fn new() -> Self {
+        Self {
+            socket_names: None,
+            visibility: None,
+        }
+    }
+
+    pub fn with_socket_names(mut self, names: Vec<String>) -> Self {
+        self.socket_names = Some(names);
+        self
+    }
+
+    pub fn with_visibility(mut self, visibility: Visibility) -> Self {
+        self.visibility = Some(visibility);
+        self
+    }
+}
+
+impl Default for LocalFileStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl DiscoveryStrategy for LocalFileStrategy {
     fn discover(&self) -> Option<String> {
-        let local_sockets = vec!["./pfd.sock", "./.pfd.sock"];
+        let socket_names: Vec<&str> = self
+            .socket_names
+            .as_ref()
+            .map(|v| v.iter().map(|s| s.as_str()).collect())
+            .unwrap_or_else(|| vec!["pfd"]);
 
-        for socket_path in local_sockets {
-            if Path::new(socket_path).exists() {
+        let visibility = self.visibility.unwrap_or_default();
+
+        let mut paths = Vec::new();
+
+        for name in socket_names {
+            match visibility {
+                Visibility::NotHidden => paths.push(format!("./{}.sock", name)),
+                Visibility::Hidden => paths.push(format!("./.{}.sock", name)),
+                Visibility::Both => {
+                    paths.push(format!("./{}.sock", name));
+                    paths.push(format!("./.{}.sock", name));
+                }
+            }
+        }
+
+        for socket_path in paths {
+            if Path::new(&socket_path).exists() {
                 tracing::debug!("Found socket: {}", socket_path);
-                return Some(socket_path.to_string());
+                return Some(socket_path);
             }
         }
 
@@ -62,7 +122,7 @@ pub fn discover_socket(config: DiscoveryConfig) -> anyhow::Result<String> {
     }
 
     // Priority 3: Local discovery
-    let local_strategy = LocalFileStrategy;
+    let local_strategy = LocalFileStrategy::default();
     if let Some(socket) = local_strategy.discover() {
         return Ok(socket);
     }
@@ -101,5 +161,42 @@ mod tests {
             env_var: "TEST_SOCKET".to_string(),
         };
         assert_eq!(strategy.discover(), None);
+    }
+
+    #[test]
+    fn test_local_file_strategy_default() {
+        let strategy = LocalFileStrategy::default();
+        // Default should check both ./pfd.sock and ./.pfd.sock
+        assert_eq!(strategy.socket_names, None);
+        assert_eq!(strategy.visibility, None);
+    }
+
+    #[test]
+    fn test_local_file_strategy_with_names() {
+        let strategy = LocalFileStrategy::new()
+            .with_socket_names(vec!["test".to_string(), "demo".to_string()]);
+        let _expected_paths = ["./test.sock", "./.test.sock", "./demo.sock", "./.demo.sock"];
+        assert_eq!(
+            strategy.socket_names,
+            Some(vec!["test".to_string(), "demo".to_string()])
+        );
+        assert_eq!(strategy.visibility, None);
+    }
+
+    #[test]
+    fn test_local_file_strategy_not_hidden() {
+        let strategy = LocalFileStrategy::new().with_visibility(Visibility::NotHidden);
+        assert_eq!(strategy.visibility, Some(Visibility::NotHidden));
+    }
+
+    #[test]
+    fn test_local_file_strategy_hidden() {
+        let strategy = LocalFileStrategy::new().with_visibility(Visibility::Hidden);
+        assert_eq!(strategy.visibility, Some(Visibility::Hidden));
+    }
+
+    #[test]
+    fn test_visibility_default() {
+        assert_eq!(Visibility::default(), Visibility::Both);
     }
 }
