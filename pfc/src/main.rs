@@ -1,12 +1,13 @@
-use anyhow::Result;
-use tracing_subscriber::EnvFilter;
+fn main() {
+    let args = std::env::args().collect::<Vec<_>>();
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
-        .init();
+    // Check for --quiet flag early
+    let quiet = args.iter().any(|a| a == "-q" || a == "--quiet");
 
-    pfc::run().await
+    if let Err(e) = pfc::run() {
+        if !quiet {
+            eprintln!("{}", pfc::error::display_error(&e));
+        }
+        std::process::exit(1);
+    }
 }

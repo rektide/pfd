@@ -21,6 +21,10 @@ pub struct Cli {
     pub socket: Option<String>,
 
     /// Increase logging verbosity
-    #[arg(short, long, action = clap::ArgAction::Count)]
+    #[arg(short, long, action = clap::ArgAction::Count, global = true)]
     pub verbose: u8,
+
+    /// Suppress all output
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
 }
