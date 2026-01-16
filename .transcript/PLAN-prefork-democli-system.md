@@ -30,13 +30,21 @@ Build a client/server pre-fork system in Rust where a lightweight client transfe
 | cwd | Current working directory for execution |
 | descriptors | File descriptors array [stdin, stdout, stderr] |
 
+## Epics Structure
+
+This work is organized into three main epics:
+
+1. **Research** (prefork-rs-gc3): Foundation research covering FD-TRANSFER, SOCKET-DISCOVERY, DAEMON-LIFECYCLE, and EXECUTION-CONTEXT
+2. **PFD-DAEMON** (prefork-rs-ufj): Server implementation for receiving execution contexts
+3. **PFC-CLIENT** (prefork-rs-ksn): Minimal client for transferring execution context
+
 ## Architecture Views
 
 ### Component Architecture
 
 ```
 ┌─────────────┐                    ┌─────────────┐
-│     PFC     │                    │     PFD     │
+│  PFC-CLIENT │                    │  PFD-DAEMON │
 │  (Client)   │                    │  (Daemon)   │
 └──────┬──────┘                    └──────┬──────┘
        │                                  │
@@ -131,22 +139,22 @@ Build a client/server pre-fork system in Rust where a lightweight client transfe
 
 ## Implementation Plan (Tentative)
 
-### Phase 1: Research & Exploration
+### Phase 1: Research & Exploration (Research Epic)
 
 - Complete all research tickets (FD-TRANSFER, SOCKET-DISCOVERY, DAEMON-LIFECYCLE, EXECUTION-CONTEXT)
 - Build minimal prototype of fd transfer using `sendfd`
 - Test socket discovery strategies
 - Experiment with daemonization patterns
 
-### Phase 2: Daemon Foundation
+### Phase 2: PFD-DAEMON Foundation
 
 - Basic daemon structure with double-fork
-- PID file management
+- PID file management in XDG locations
 - Unix domain socket server
 - Command execution with transferred descriptors
 - Single command: `add` (sum all arguments, complain on stderr)
 
-### Phase 3: Client Implementation
+### Phase 3: PFC-CLIENT Implementation
 
 - Minimal client binary
 - Socket discovery implementation
@@ -166,8 +174,8 @@ Build a client/server pre-fork system in Rust where a lightweight client transfe
 - **SOCKET-DISCOVERY**: Socket discovery strategies
 - **DAEMON-LIFECYCLE**: Process lifecycle management
 - **EXECUTION-CONTEXT**: Execution context serialization
-- **PFD**: PreFork Daemon
-- **PFC**: PreFork Client
+- **PFD-DAEMON**: PreFork Daemon server implementation
+- **PFC-CLIENT**: PreFork Client minimal implementation
 - **XDG-PATH**: XDG compliant directory paths
 
 ## Open Questions
