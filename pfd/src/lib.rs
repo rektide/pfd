@@ -1,5 +1,5 @@
 use discovery::{CreateStrategy, LocalFileStrategy};
-use tokio::io::AsyncReadExt;
+use sendfd::RecvWithFd;
 use tokio::net::UnixListener;
 use tokio::signal;
 
@@ -47,10 +47,13 @@ pub async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_connection(mut stream: tokio::net::UnixStream) -> anyhow::Result<()> {
+async fn handle_connection(stream: tokio::net::UnixStream) -> anyhow::Result<()> {
     tracing::debug!("Handling connection");
     let mut buf = [0u8; 1024];
-    let n = stream.read(&mut buf).await?;
-    tracing::debug!("Received {} bytes", n);
+    let mut fd_storage = [0; 8];
+    let (n, fds) =
+        tokio::task::spawn_blocking(move || stream.recv_with_fd(&mut buf, &mut fd_storage))
+            .await??;
+    tracing::debug!("Received {} bytes, {} fds", n, fds);
     Ok(())
 }
