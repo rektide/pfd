@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# bd-rename - Rename a beads issue ID
+# Usage: bd-rename <old-id> <new-id>
+
+set -euo pipefail
+
+# Read prefix from beads config
+PREFIX=$(grep '^issue-prefix:' .beads/config.yaml 2>/dev/null | sed 's/^issue-prefix: "\(.*\)"/\1/' || echo "")
+
+OLD_ID="$1"
+NEW_ID="$2"
+
+if [[ -z "$OLD_ID" || -z "$NEW_ID" ]]; then
+  echo "Usage: $0 <old-id> <new-id>"
+  echo "Example: $0 pfd-r58 fd-transfer"
+  echo "The new ID will be prefixed with '$PREFIX' (from config)"
+  exit 1
+fi
+
+# Add prefix to new ID if not already included
+if [[ -n "$PREFIX" && ! "$NEW_ID" =~ ^"$PREFIX"- ]]; then
+  NEW_ID="$PREFIX-$NEW_ID"
+fi
+
+echo "Renaming issue from '$OLD_ID' to '$NEW_ID'"
+
+# Check if backup already exists
+cp .beads/issues.jsonl .beads/issues.jsonl.bak
+
+# Generate jq script to rename issue and update all references
+jq_script='
+  if .id == "'"$OLD_ID"'" then
+    .id = "'"$NEW_ID"'"
+  else
+    .
+  end |
+  (
+    if .dependencies then
+      .dependencies |= map(
+        if .issue_id == "'"$OLD_ID"'" then
+          .issue_id = "'"$NEW_ID"'"
+        else
+          .
+        end |
+        if .depends_on_id == "'"$OLD_ID"'" then
+          .depends_on_id = "'"$NEW_ID"'"
+        else
+          .
+        end
+      )
+    else
+      .
+    end
+  )
+'
+
+# Apply changes (compact output)
+jq -c "$jq_script" .beads/issues.jsonl.bak > .beads/issues.jsonl
+
+# Sync beads
+bd sync
+
+echo "Done. Backup saved to .beads/issues.jsonl.bak"
+echo "Ran bd sync to reconcile state"
