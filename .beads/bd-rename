@@ -5,8 +5,13 @@
 
 set -euo pipefail
 
-# Read prefix from beads config
-PREFIX=$(grep '^issue-prefix:' .beads/config.yaml 2>/dev/null | sed 's/^issue-prefix: "\(.*\)"/\1/' || echo "")
+# Function to get and memoize prefix
+get_prefix() {
+  if [[ -z "${_PREFIX_CACHE+x}" ]]; then
+    _PREFIX_CACHE=$(grep '^issue-prefix:' .beads/config.yaml 2>/dev/null | sed 's/^issue-prefix: "\(.*\)"/\1/' || echo "")
+  fi
+  echo "$_PREFIX_CACHE"
+}
 
 OLD_ID="$1"
 NEW_ID="$2"
@@ -14,24 +19,57 @@ NEW_ID="$2"
 if [[ -z "$OLD_ID" || -z "$NEW_ID" ]]; then
   echo "Usage: $0 <old-id> <new-id>"
   echo "Example: $0 pfd-r58 fd-transfer"
+  PREFIX=$(get_prefix)
   echo "The new ID will be prefixed with '$PREFIX' (from config)"
   exit 1
 fi
 
-# Add prefix to new ID if not already included
-if [[ -n "$PREFIX" && ! "$NEW_ID" =~ ^"$PREFIX"- ]]; then
-  NEW_ID="$PREFIX-$NEW_ID"
-fi
-
 echo "Renaming issue from '$OLD_ID' to '$NEW_ID'"
 
-# Check if backup already exists
-cp .beads/issues.jsonl .beads/issues.jsonl.bak
+# Walk parent tree in single loop: find top parent and strip prefixes
+CURRENT_ID="$OLD_ID"
+TOP_PARENT=""
+CLEAN_ID="$NEW_ID"
+
+while true; do
+  # Extract parent ID (everything after last dash)
+  PARENT_ID="${CURRENT_ID%-*}"
+  # If no parent, we're done walking
+  if [[ "$PARENT_ID" == "$CURRENT_ID" ]]; then
+    break
+  fi
+  # Track first parent (closest to issue being renamed)
+  if [[ -z "$TOP_PARENT" ]]; then
+    TOP_PARENT="$PARENT_ID"
+  fi
+  # Strip parent prefix from new ID if it matches
+  PARENT_PREFIX="${PARENT_ID}-"
+  if [[ "$CLEAN_ID" == "$PARENT_PREFIX"* ]]; then
+    CLEAN_ID="${CLEAN_ID#$PARENT_PREFIX}"
+    echo "  Removed prefix: '$PARENT_PREFIX' → '$CLEAN_ID'"
+  fi
+  # Move up tree
+  CURRENT_ID="$PARENT_ID"
+done
+
+# If no parent found, use project prefix
+if [[ -z "$TOP_PARENT" ]]; then
+  TOP_PARENT=$(get_prefix)
+fi
+
+# Prepend parent prefix if not already on new ID
+if [[ ! "$CLEAN_ID" =~ ^"$TOP_PARENT"- ]]; then
+  FINAL_ID="${TOP_PARENT}-${CLEAN_ID}"
+  echo "Added prefix: '$TOP_PARENT'- → '$FINAL_ID'"
+else
+  FINAL_ID="$CLEAN_ID"
+  echo "Using ID: '$FINAL_ID'"
+fi
 
 # Generate jq script to rename issue and update all references
 jq_script='
   if .id == "'"$OLD_ID"'" then
-    .id = "'"$NEW_ID"'"
+    .id = "'"$FINAL_ID"'"
   else
     .
   end |
@@ -39,12 +77,12 @@ jq_script='
     if .dependencies then
       .dependencies |= map(
         if .issue_id == "'"$OLD_ID"'" then
-          .issue_id = "'"$NEW_ID"'"
+          .issue_id = "'"$FINAL_ID"'"
         else
           .
         end |
         if .depends_on_id == "'"$OLD_ID"'" then
-          .depends_on_id = "'"$NEW_ID"'"
+          .depends_on_id = "'"$FINAL_ID"'"
         else
           .
         end
@@ -56,10 +94,10 @@ jq_script='
 '
 
 # Apply changes (compact output)
-jq -c "$jq_script" .beads/issues.jsonl.bak >.beads/issues.jsonl
+jq -c "$jq_script" .beads/issues.jsonl > .beads/issues.jsonl.tmp && mv .beads/issues.jsonl.tmp .beads/issues.jsonl
 
-# Sync beads
+# Import from modified JSONL
 bd import -i .beads/issues.jsonl
 
-echo "Done. Backup saved to .beads/issues.jsonl.bak"
-echo "Ran bd sync to reconcile state"
+echo "Renamed to: '$FINAL_ID'"
+echo "Imported from modified JSONL to update database"
