@@ -53,27 +53,38 @@ impl DiscoveryStrategy for LocalFileStrategy {
             .socket_names
             .as_ref()
             .map(|v| v.iter().map(|s| s.as_str()).collect())
-            .unwrap_or_else(|| vec!["pfd"]);
+            .unwrap_or_else(|| vec!["pfd.sock"]);
 
         let visibility = self.visibility.unwrap_or_default();
 
-        let mut paths = Vec::new();
-
         for name in socket_names {
             match visibility {
-                Visibility::NotHidden => paths.push(format!("./{}.sock", name)),
-                Visibility::Hidden => paths.push(format!("./.{}.sock", name)),
-                Visibility::Both => {
-                    paths.push(format!("./{}.sock", name));
-                    paths.push(format!("./.{}.sock", name));
+                Visibility::NotHidden => {
+                    let path = format!("./{}", name);
+                    if Path::new(&path).exists() {
+                        tracing::debug!("Found socket: {}", path);
+                        return Some(path);
+                    }
                 }
-            }
-        }
-
-        for socket_path in paths {
-            if Path::new(&socket_path).exists() {
-                tracing::debug!("Found socket: {}", socket_path);
-                return Some(socket_path);
+                Visibility::Hidden => {
+                    let path = format!("./.{}", name);
+                    if Path::new(&path).exists() {
+                        tracing::debug!("Found socket: {}", path);
+                        return Some(path);
+                    }
+                }
+                Visibility::Both => {
+                    let path1 = format!("./{}", name);
+                    if Path::new(&path1).exists() {
+                        tracing::debug!("Found socket: {}", path1);
+                        return Some(path1);
+                    }
+                    let path2 = format!("./.{}", name);
+                    if Path::new(&path2).exists() {
+                        tracing::debug!("Found socket: {}", path2);
+                        return Some(path2);
+                    }
+                }
             }
         }
 
@@ -166,7 +177,6 @@ mod tests {
     #[test]
     fn test_local_file_strategy_default() {
         let strategy = LocalFileStrategy::default();
-        // Default should check both ./pfd.sock and ./.pfd.sock
         assert_eq!(strategy.socket_names, None);
         assert_eq!(strategy.visibility, None);
     }
@@ -174,11 +184,11 @@ mod tests {
     #[test]
     fn test_local_file_strategy_with_names() {
         let strategy = LocalFileStrategy::new()
-            .with_socket_names(vec!["test".to_string(), "demo".to_string()]);
+            .with_socket_names(vec!["test.sock".to_string(), "demo.sock".to_string()]);
         let _expected_paths = ["./test.sock", "./.test.sock", "./demo.sock", "./.demo.sock"];
         assert_eq!(
             strategy.socket_names,
-            Some(vec!["test".to_string(), "demo".to_string()])
+            Some(vec!["test.sock".to_string(), "demo.sock".to_string()])
         );
         assert_eq!(strategy.visibility, None);
     }
