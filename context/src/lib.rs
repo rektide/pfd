@@ -35,7 +35,7 @@ impl ExecutionContext {
 
     pub fn serialize(&self) -> anyhow::Result<Vec<u8>> {
         use rkyv::to_bytes;
-        to_bytes::<ExecutionContext, 4096>(self)
+        to_bytes::<ExecutionContext, 16384>(self)
             .map(|bytes| bytes.to_vec())
             .map_err(|e| anyhow::anyhow!("Failed to serialize execution context: {}", e))
     }
