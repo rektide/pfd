@@ -58,32 +58,18 @@ impl DiscoveryStrategy for LocalFileStrategy {
         let visibility = self.visibility.unwrap_or_default();
 
         for name in socket_names {
-            match visibility {
-                Visibility::NotHidden => {
-                    let path = format!("./{}", name);
-                    if Path::new(&path).exists() {
-                        tracing::debug!("Found socket: {}", path);
-                        return Some(path);
-                    }
+            if visibility == Visibility::NotHidden || visibility == Visibility::Both {
+                let path = format!("./{}", name);
+                if Path::new(&path).exists() {
+                    tracing::debug!("Found socket: {}", path);
+                    return Some(path);
                 }
-                Visibility::Hidden => {
-                    let path = format!("./.{}", name);
-                    if Path::new(&path).exists() {
-                        tracing::debug!("Found socket: {}", path);
-                        return Some(path);
-                    }
-                }
-                Visibility::Both => {
-                    let path1 = format!("./{}", name);
-                    if Path::new(&path1).exists() {
-                        tracing::debug!("Found socket: {}", path1);
-                        return Some(path1);
-                    }
-                    let path2 = format!("./.{}", name);
-                    if Path::new(&path2).exists() {
-                        tracing::debug!("Found socket: {}", path2);
-                        return Some(path2);
-                    }
+            }
+            if visibility == Visibility::Hidden || visibility == Visibility::Both {
+                let path = format!("./.{}", name);
+                if Path::new(&path).exists() {
+                    tracing::debug!("Found socket: {}", path);
+                    return Some(path);
                 }
             }
         }
