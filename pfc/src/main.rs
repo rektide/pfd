@@ -1,5 +1,4 @@
 use anyhow::Result;
-use pfc::cli::Cli;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
