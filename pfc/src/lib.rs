@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 
 pub mod cli;
+pub mod error;
 pub mod execution;
 pub mod socket;
 
