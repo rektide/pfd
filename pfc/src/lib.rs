@@ -1,26 +1,16 @@
 use anyhow::Result;
 use clap::Parser;
-use tracing_subscriber::{EnvFilter, fmt};
 
 pub mod cli;
 pub mod error;
 pub mod execution;
 pub mod socket;
+mod trace;
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
 
-    if !cli.quiet {
-        let filter = match cli.verbose {
-            0 => "warn",
-            1 => "info",
-            _ => "debug",
-        };
-        fmt()
-            .with_env_filter(EnvFilter::from_default_env().add_directive(filter.parse()?))
-            .with_writer(std::io::stderr)
-            .init();
-    }
+    trace::init(cli.verbose, cli.quiet)?;
 
     tracing::debug!("pfc starting with command: {}", cli.command);
 
