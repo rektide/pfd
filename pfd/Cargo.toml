@@ -3,9 +3,15 @@ name = "pfd"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "pfd"
+path = "src/main.rs"
+
 [dependencies]
 discovery = { path = "../discovery" }
-tokio = { version = "1", features = ["net", "signal", "macros", "rt", "io-util"] }
+tokio = { version = "1", features = ["net", "signal", "macros", "rt-multi-thread", "io-util"] }
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
 sendfd = { version = "0.4", features = ["tokio"] }
+clap = { version = "4", features = ["derive", "env"] }

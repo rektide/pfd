@@ -309,10 +309,12 @@ name = "pfd"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "discovery",
  "sendfd",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

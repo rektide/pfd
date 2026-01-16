@@ -1,9 +1,10 @@
+use anyhow::Result;
 use discovery::{CreateStrategy, LocalFileStrategy};
 use sendfd::RecvWithFd;
 use tokio::net::UnixListener;
 use tokio::signal;
 
-pub async fn run() -> anyhow::Result<()> {
+pub async fn run_daemon() -> Result<()> {
     let strategy = LocalFileStrategy::default();
     let socket_path = strategy.create();
 
