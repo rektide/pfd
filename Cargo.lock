@@ -150,6 +150,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "discovery"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tracing",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -271,6 +279,7 @@ dependencies = [
  "anyhow",
  "clap",
  "directories",
+ "discovery",
  "serde",
  "serde_json",
  "thiserror",

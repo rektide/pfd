@@ -1,10 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
+use discovery::DiscoveryConfig;
 
 pub mod cli;
 pub mod error;
 pub mod execution;
-pub mod socket;
 mod trace;
 
 pub fn run() -> Result<()> {
@@ -17,7 +17,10 @@ pub fn run() -> Result<()> {
     let ctx = execution::ExecutionContext::new(cli.command, cli.args);
     tracing::debug!("Execution context: {:?}", ctx);
 
-    let socket_path = socket::discover_socket(cli.socket)?;
+    let socket_path = discovery::discover_socket(DiscoveryConfig {
+        socket_arg: cli.socket,
+        socket_env: "PFC_SOCKET".to_string(),
+    })?;
     tracing::info!("Using socket: {}", socket_path);
 
     // TODO: Connect to daemon
