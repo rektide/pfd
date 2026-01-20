@@ -40,21 +40,35 @@ pub async fn run() -> Result<()> {
 
 async fn send_to_daemon(socket_path: &str, data: &[u8]) -> Result<()> {
     let socket = UnixDatagram::unbound()?;
+    tracing::debug!("Created unbound socket");
+
     socket.connect(socket_path)?;
+    tracing::debug!("Connected to {}", socket_path);
 
     let fds = [0, 1, 2];
 
-    socket.send_with_fd(data, &fds)?;
-
-    tracing::info!(
-        "Sent {} bytes with {} file descriptors",
-        data.len(),
-        fds.len()
-    );
-
-    tracing::info!("Waiting for Ctrl+C to exit...");
-    tokio::signal::ctrl_c().await?;
-    tracing::info!("Exiting");
+    let mut retries = 0;
+    loop {
+        match socket.send_with_fd(data, &fds) {
+            Ok(_) => {
+                tracing::info!(
+                    "Sent {} bytes with {} file descriptors",
+                    data.len(),
+                    fds.len()
+                );
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                retries += 1;
+                if retries > 10 {
+                    return Err(e.into());
+                }
+                tracing::debug!("Send would block, retry {}...", retries);
+                tokio::time::sleep(tokio::time::Duration::from_millis(10 * retries as u64)).await;
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
 
     Ok(())
 }

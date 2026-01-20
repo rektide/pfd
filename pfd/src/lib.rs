@@ -44,6 +44,12 @@ impl CmdRegistry {
         self.commands.insert(name.into(), wrapper);
     }
 
+    fn clone_ref(&self) -> Self {
+        Self {
+            commands: self.commands.clone(),
+        }
+    }
+
     pub async fn dispatch(
         &self,
         command: &str,
@@ -128,7 +134,9 @@ pub async fn run_daemon() -> Result<()> {
                 let mut fd_storage = [0; 8];
                 let std_socket = Arc::clone(&std_socket);
                 move || {
+                    tracing::debug!("DEBUG: Attempting recv_with_fd");
                     let (n, num_fds) = std_socket.lock().unwrap().recv_with_fd(&mut buf, &mut fd_storage)?;
+                    tracing::debug!("DEBUG: recv_with_fd returned {} bytes, {} FDs", n, num_fds);
                     let bytes = buf[..n].to_vec();
                     let fds: Vec<OwnedFd> = fd_storage[..num_fds]
                         .iter()
@@ -139,21 +147,27 @@ pub async fn run_daemon() -> Result<()> {
             }) => {
                 match result {
                     Ok(Ok((bytes, fds))) => {
+                        tracing::info!("DEBUG: Received {} bytes, {} FDs", bytes.len(), fds.len());
                         let archived = unsafe { rkyv::archived_root::<ExecutionContext>(&bytes) };
                         let context: ExecutionContext = archived.deserialize(&mut rkyv::Infallible)?;
                         tracing::info!("Received command: {} with {} fds", context.command, fds.len());
 
                         let command = context.command.clone();
-                        match registry.dispatch(&command, context, fds).await {
-                            Ok(()) => {
-                                tracing::debug!("Command '{}' executed successfully", command);
+                        let registry = registry.clone_ref();
+                        tokio::spawn(async move {
+                            match registry.dispatch(&command, context, fds).await {
+                                Ok(()) => {
+                                    tracing::debug!("Command '{}' executed successfully", command);
+                                    tracing::info!("DEBUG: Command completed");
+                                }
+                                Err(e) => {
+                                    tracing::error!("Command '{}' failed: {}", command, e);
+                                }
                             }
-                            Err(e) => {
-                                tracing::error!("Command '{}' failed: {}", command, e);
-                            }
-                        }
+                        });
                     }
                     Ok(Err(e)) => {
+                        tracing::debug!("DEBUG: Recv error: {}", e);
                         if e.kind() == std::io::ErrorKind::WouldBlock {
                             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                         } else {
