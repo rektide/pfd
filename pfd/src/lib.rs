@@ -3,10 +3,59 @@ use context::ExecutionContext;
 use discovery::{CreateStrategy, LocalFileStrategy};
 use rkyv::{Archived, Deserialize};
 use sendfd::RecvWithFd;
+use std::collections::HashMap;
 use std::os::fd::{FromRawFd, OwnedFd};
 use std::os::unix::io::AsRawFd;
+use std::pin::Pin;
+use std::sync::Arc;
 use tokio::net::UnixDatagram;
 use tokio::signal;
+
+type CommandFn = Arc<
+    dyn Fn(
+            ExecutionContext,
+            Vec<OwnedFd>,
+        ) -> Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
+        + Send
+        + Sync,
+>;
+
+pub struct CmdRegistry {
+    commands: HashMap<String, CommandFn>,
+}
+
+impl CmdRegistry {
+    pub fn new() -> Self {
+        Self {
+            commands: HashMap::new(),
+        }
+    }
+
+    pub fn register<F, Fut>(&mut self, name: impl Into<String>, command: F)
+    where
+        F: Fn(ExecutionContext, Vec<OwnedFd>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<()>> + Send + 'static,
+    {
+        let wrapper = Arc::new(move |ctx: ExecutionContext, fds: Vec<OwnedFd>| {
+            Box::pin(command(ctx, fds))
+                as Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
+        });
+        self.commands.insert(name.into(), wrapper);
+    }
+
+    pub async fn dispatch(
+        &self,
+        command: &str,
+        ctx: ExecutionContext,
+        fds: Vec<OwnedFd>,
+    ) -> Result<()> {
+        let handler = self
+            .commands
+            .get(command)
+            .ok_or_else(|| anyhow::anyhow!("Unknown command: {}", command))?;
+        handler(ctx, fds).await
+    }
+}
 
 pub async fn run_daemon() -> Result<()> {
     let strategy = LocalFileStrategy::default();
