@@ -115,9 +115,8 @@ pub async fn run_daemon() -> Result<()> {
     let ctrl_c = signal::ctrl_c();
     tokio::pin!(ctrl_c);
 
-    let std_socket = socket.into_std()?;
-    std_socket.set_nonblocking(false)?;
-    let std_socket = Arc::new(std::sync::Mutex::new(std_socket));
+    let std_socket = Arc::new(std::sync::Mutex::new(socket.into_std()?));
+    std_socket.lock().unwrap().set_nonblocking(true)?;
 
     loop {
         tokio::select! {
@@ -152,7 +151,11 @@ pub async fn run_daemon() -> Result<()> {
                         }
                     }
                     Ok(Err(e)) => {
-                        tracing::error!("Receive error: {}", e);
+                        if e.kind() == std::io::ErrorKind::WouldBlock {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                        } else {
+                            tracing::error!("Receive error: {}", e);
+                        }
                     }
                     Err(e) => {
                         tracing::error!("Task error: {}", e);

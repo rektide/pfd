@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 discovery = { path = "../discovery" }
 context = { path = "../context" }
-tokio = { version = "1", features = ["net", "signal", "macros", "rt-multi-thread", "io-util", "fs"] }
+tokio = { version = "1", features = ["net", "signal", "macros", "rt-multi-thread", "io-util", "fs", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
