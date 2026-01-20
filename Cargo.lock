@@ -190,9 +190,9 @@ name = "context"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytecheck",
  "rkyv",
  "rkyv_dyn",
- "tracing",
 ]
 
 [[package]]
@@ -442,7 +442,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "context",
  "discovery",
+ "rkyv",
  "sendfd",
  "tokio",
  "tracing",

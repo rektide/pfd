@@ -1,6 +1,7 @@
+use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
-#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[derive(Debug, Clone, Archive, Deserialize, Serialize, CheckBytes)]
 pub struct ExecutionContext {
     pub working_dir: String,
     pub command: String,

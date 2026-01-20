@@ -1,5 +1,7 @@
 use anyhow::Result;
+use context::ExecutionContext;
 use discovery::{CreateStrategy, LocalFileStrategy};
+use rkyv::{Archived, Deserialize};
 use sendfd::RecvWithFd;
 use std::os::fd::{FromRawFd, OwnedFd};
 use std::os::unix::io::AsRawFd;
@@ -25,19 +27,24 @@ pub async fn run_daemon() -> Result<()> {
     loop {
         tokio::select! {
             result = tokio::task::spawn_blocking({
-                let mut buf = [0u8; 1024];
+                let mut buf = [0u8; 16384];
                 let mut fd_storage = [0; 8];
                 move || {
                     use std::os::unix::net::UnixDatagram as StdUnixDatagram;
                     let std_socket = unsafe {
                         StdUnixDatagram::from(OwnedFd::from_raw_fd(raw_fd))
                     };
-                    std_socket.recv_with_fd(&mut buf, &mut fd_storage)
+                    let (n, fds) = std_socket.recv_with_fd(&mut buf, &mut fd_storage)?;
+                    let bytes = buf[..n].to_vec();
+                    Ok::<_, std::io::Error>((bytes, fds))
                 }
             }) => {
                 match result {
-                    Ok(Ok((n, fds))) => {
-                        tracing::debug!("Received {} bytes, {} fds", n, fds);
+                    Ok(Ok((bytes, _fds))) => {
+                        let archived = unsafe { &*(bytes.as_ptr() as *const Archived<ExecutionContext>) };
+                        let context: ExecutionContext = archived.deserialize(&mut rkyv::Infallible)?;
+                        tracing::debug!("Deserialized EXECUTION-CONTEXT: command={}, args={:?}",
+                            context.command, context.args);
                     }
                     Ok(Err(e)) => {
                         tracing::error!("Receive error: {}", e);
