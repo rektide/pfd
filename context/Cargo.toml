@@ -9,6 +9,5 @@ check-bytes = ["bytecheck"]
 
 [dependencies]
 anyhow = "1"
-rkyv = { version = "0.7", features = ["validation"] }
-rkyv_dyn = "0.7"
-bytecheck = { version = "0.6", optional = true }
+rkyv = { version = "0.8", features = ["bytecheck"] }
+bytecheck = { version = "0.8", optional = true }

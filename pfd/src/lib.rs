@@ -1,7 +1,8 @@
 use anyhow::Result;
 use context::ExecutionContext;
 use discovery::{CreateStrategy, LocalFileStrategy};
-use rkyv::Deserialize;
+use rkyv::api::high::from_bytes;
+use rkyv::rancor::Error;
 use sendfd::RecvWithFd;
 use std::collections::HashMap;
 use std::fs::File;
@@ -145,8 +146,8 @@ pub async fn run_daemon() -> Result<()> {
             }) => {
                 match result {
                     Ok(Ok((bytes, fds))) => {
-                        let archived = unsafe { rkyv::archived_root::<ExecutionContext>(&bytes) };
-                        let context: ExecutionContext = archived.deserialize(&mut rkyv::Infallible)?;
+                        let context: ExecutionContext = from_bytes::<ExecutionContext, Error>(&bytes)
+                            .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
                         tracing::info!("Received command: {} with {} fds", context.command, fds.len());
 
                         let command = context.command.clone();
@@ -165,7 +166,7 @@ pub async fn run_daemon() -> Result<()> {
                     Ok(Err(e)) => {
                         if e.kind() == std::io::ErrorKind::WouldBlock {
                             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-                        } else {
+                            } else {
                             tracing::error!("Receive error: {}", e);
                         }
                     }
