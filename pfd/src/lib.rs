@@ -59,7 +59,6 @@ impl CmdRegistry {
     }
 }
 
-#[allow(dead_code)]
 async fn add_command(ctx: ExecutionContext, mut fds: Vec<OwnedFd>) -> Result<()> {
     if ctx.args.is_empty() {
         if let Some(stderr) = fds.get_mut(2) {
@@ -109,6 +108,10 @@ pub async fn run_daemon() -> Result<()> {
     let socket = UnixDatagram::bind(&socket_path)?;
     tracing::info!("Listening on {}", socket_path);
 
+    let mut registry = CmdRegistry::new();
+    registry.register("add", add_command);
+    tracing::info!("Registered commands: add");
+
     let ctrl_c = signal::ctrl_c();
     tokio::pin!(ctrl_c);
 
@@ -124,17 +127,30 @@ pub async fn run_daemon() -> Result<()> {
                     let std_socket = unsafe {
                         StdUnixDatagram::from(OwnedFd::from_raw_fd(raw_fd))
                     };
-                    let (n, fds) = std_socket.recv_with_fd(&mut buf, &mut fd_storage)?;
+                    let (n, num_fds) = std_socket.recv_with_fd(&mut buf, &mut fd_storage)?;
                     let bytes = buf[..n].to_vec();
+                    let fds: Vec<OwnedFd> = fd_storage[..num_fds]
+                        .iter()
+                        .map(|&fd| unsafe { OwnedFd::from_raw_fd(fd) })
+                        .collect();
                     Ok::<_, std::io::Error>((bytes, fds))
                 }
             }) => {
                 match result {
-                    Ok(Ok((bytes, _fds))) => {
+                    Ok(Ok((bytes, fds))) => {
                         let archived = unsafe { &*(bytes.as_ptr() as *const Archived<ExecutionContext>) };
                         let context: ExecutionContext = archived.deserialize(&mut rkyv::Infallible)?;
-                        tracing::debug!("Deserialized EXECUTION-CONTEXT: command={}, args={:?}",
-                            context.command, context.args);
+                        tracing::info!("Received command: {} with {} fds", context.command, fds.len());
+
+                        let command = context.command.clone();
+                        match registry.dispatch(&command, context, fds).await {
+                            Ok(()) => {
+                                tracing::debug!("Command '{}' executed successfully", command);
+                            }
+                            Err(e) => {
+                                tracing::error!("Command '{}' failed: {}", command, e);
+                            }
+                        }
                     }
                     Ok(Err(e)) => {
                         tracing::error!("Receive error: {}", e);
