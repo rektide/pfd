@@ -3,8 +3,6 @@ use clap::Parser;
 use context::ExecutionContext;
 use discovery::DiscoveryConfig;
 use sendfd::SendWithFd;
-use std::os::fd::{FromRawFd, OwnedFd};
-use std::os::unix::io::AsRawFd;
 use tokio::net::UnixDatagram;
 
 pub mod cli;
@@ -40,18 +38,11 @@ pub async fn run() -> Result<()> {
     Ok(())
 }
 
-async fn send_to_daemon(_socket_path: &str, data: &[u8]) -> Result<()> {
+async fn send_to_daemon(socket_path: &str, data: &[u8]) -> Result<()> {
     let socket = UnixDatagram::unbound()?;
+    socket.connect(socket_path)?;
 
-    let stdin_fd = unsafe { OwnedFd::from_raw_fd(0) };
-    let stdout_fd = unsafe { OwnedFd::from_raw_fd(1) };
-    let stderr_fd = unsafe { OwnedFd::from_raw_fd(2) };
-
-    let fds = [
-        stdin_fd.as_raw_fd(),
-        stdout_fd.as_raw_fd(),
-        stderr_fd.as_raw_fd(),
-    ];
+    let fds = [0, 1, 2];
 
     socket.send_with_fd(data, &fds)?;
 
@@ -60,6 +51,10 @@ async fn send_to_daemon(_socket_path: &str, data: &[u8]) -> Result<()> {
         data.len(),
         fds.len()
     );
+
+    tracing::info!("Waiting for Ctrl+C to exit...");
+    tokio::signal::ctrl_c().await?;
+    tracing::info!("Exiting");
 
     Ok(())
 }

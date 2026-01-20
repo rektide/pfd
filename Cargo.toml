@@ -13,7 +13,7 @@ repository = "https://github.com/prefork/prefork-rs"
 clap = { version = "*", features = ["derive", "unicode", "wrap_help"] }
 anyhow = "*"
 thiserror = "*"
-tokio = { version = "*", features = ["rt-multi-thread", "macros", "fs", "net", "io-util"] }
+tokio = { version = "*", features = ["rt-multi-thread", "macros", "fs", "net", "io-util", "signal"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = "*"
 tracing = "*"
