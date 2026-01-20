@@ -1,3 +1,9 @@
+mod xdg_runtime;
+mod xdg_runtime_create;
+
+pub use xdg_runtime::XdgRuntimeStrategy;
+pub use xdg_runtime_create::XdgRuntimeCreateStrategy;
+
 use std::path::Path;
 
 pub trait DiscoveryStrategy {
