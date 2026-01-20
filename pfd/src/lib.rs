@@ -59,6 +59,7 @@ impl CmdRegistry {
     }
 }
 
+#[allow(dead_code)]
 async fn add_command(ctx: ExecutionContext, mut fds: Vec<OwnedFd>) -> Result<()> {
     if ctx.args.is_empty() {
         if let Some(stderr) = fds.get_mut(2) {

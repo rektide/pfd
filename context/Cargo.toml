@@ -3,8 +3,12 @@ name = "context"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+check-bytes = ["bytecheck"]
+
 [dependencies]
 anyhow = "1"
 rkyv = { version = "0.7", features = ["validation"] }
 rkyv_dyn = "0.7"
-bytecheck = "0.6"
+bytecheck = { version = "0.6", optional = true }

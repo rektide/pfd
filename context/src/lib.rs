@@ -1,7 +1,10 @@
+#[cfg(feature = "check-bytes")]
 use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize, Serialize};
 
-#[derive(Debug, Clone, Archive, Deserialize, Serialize, CheckBytes)]
+#[cfg_attr(feature = "check-bytes", allow(unsafe_op_in_unsafe_fn))]
+#[derive(Debug, Clone, Archive, Deserialize, Serialize)]
+#[cfg_attr(feature = "check-bytes", derive(bytecheck::CheckBytes))]
 pub struct ExecutionContext {
     pub working_dir: String,
     pub command: String,
