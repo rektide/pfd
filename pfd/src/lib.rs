@@ -4,10 +4,12 @@ use discovery::{CreateStrategy, LocalFileStrategy};
 use rkyv::{Archived, Deserialize};
 use sendfd::RecvWithFd;
 use std::collections::HashMap;
+use std::fs::File;
 use std::os::fd::{FromRawFd, OwnedFd};
 use std::os::unix::io::AsRawFd;
 use std::pin::Pin;
 use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
 use tokio::net::UnixDatagram;
 use tokio::signal;
 
@@ -55,6 +57,44 @@ impl CmdRegistry {
             .ok_or_else(|| anyhow::anyhow!("Unknown command: {}", command))?;
         handler(ctx, fds).await
     }
+}
+
+async fn add_command(ctx: ExecutionContext, mut fds: Vec<OwnedFd>) -> Result<()> {
+    if ctx.args.is_empty() {
+        if let Some(stderr) = fds.get_mut(2) {
+            let mut stderr =
+                tokio::fs::File::from_std(unsafe { File::from_raw_fd(stderr.as_raw_fd()) });
+            stderr
+                .write_all(b"error: no arguments provided to add command\n")
+                .await?;
+        }
+        return Err(anyhow::anyhow!("No arguments provided"));
+    }
+
+    let mut sum: i64 = 0;
+    for arg in &ctx.args {
+        match arg.parse::<i64>() {
+            Ok(n) => sum += n,
+            Err(_) => {
+                if let Some(stderr) = fds.get_mut(2) {
+                    let mut stderr =
+                        tokio::fs::File::from_std(unsafe { File::from_raw_fd(stderr.as_raw_fd()) });
+                    stderr
+                        .write_all(format!("error: invalid number '{}'\n", arg).as_bytes())
+                        .await?;
+                }
+                return Err(anyhow::anyhow!("Invalid number: {}", arg));
+            }
+        }
+    }
+
+    if let Some(stdout) = fds.get_mut(1) {
+        let mut stdout =
+            tokio::fs::File::from_std(unsafe { File::from_raw_fd(stdout.as_raw_fd()) });
+        stdout.write_all(format!("{}\n", sum).as_bytes()).await?;
+    }
+
+    Ok(())
 }
 
 pub async fn run_daemon() -> Result<()> {
