@@ -1,12 +1,11 @@
 use anyhow::Result;
 use context::ExecutionContext;
 use discovery::{CreateStrategy, LocalFileStrategy};
-use rkyv::{Archived, Deserialize};
+use rkyv::Deserialize;
 use sendfd::RecvWithFd;
 use std::collections::HashMap;
 use std::fs::File;
-use std::os::fd::{FromRawFd, OwnedFd};
-use std::os::unix::io::AsRawFd;
+use std::os::fd::{FromRawFd, IntoRawFd, OwnedFd};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
@@ -61,9 +60,10 @@ impl CmdRegistry {
 
 async fn add_command(ctx: ExecutionContext, mut fds: Vec<OwnedFd>) -> Result<()> {
     if ctx.args.is_empty() {
-        if let Some(stderr) = fds.get_mut(2) {
+        if fds.len() > 2 {
+            let stderr_fd = fds.swap_remove(2);
             let mut stderr =
-                tokio::fs::File::from_std(unsafe { File::from_raw_fd(stderr.as_raw_fd()) });
+                tokio::fs::File::from_std(unsafe { File::from_raw_fd(stderr_fd.into_raw_fd()) });
             stderr
                 .write_all(b"error: no arguments provided to add command\n")
                 .await?;
@@ -76,9 +76,11 @@ async fn add_command(ctx: ExecutionContext, mut fds: Vec<OwnedFd>) -> Result<()>
         match arg.parse::<i64>() {
             Ok(n) => sum += n,
             Err(_) => {
-                if let Some(stderr) = fds.get_mut(2) {
-                    let mut stderr =
-                        tokio::fs::File::from_std(unsafe { File::from_raw_fd(stderr.as_raw_fd()) });
+                if fds.len() > 2 {
+                    let stderr_fd = fds.swap_remove(2);
+                    let mut stderr = tokio::fs::File::from_std(unsafe {
+                        File::from_raw_fd(stderr_fd.into_raw_fd())
+                    });
                     stderr
                         .write_all(format!("error: invalid number '{}'\n", arg).as_bytes())
                         .await?;
@@ -88,9 +90,10 @@ async fn add_command(ctx: ExecutionContext, mut fds: Vec<OwnedFd>) -> Result<()>
         }
     }
 
-    if let Some(stdout) = fds.get_mut(1) {
+    if fds.len() > 1 {
+        let stdout_fd = fds.swap_remove(1);
         let mut stdout =
-            tokio::fs::File::from_std(unsafe { File::from_raw_fd(stdout.as_raw_fd()) });
+            tokio::fs::File::from_std(unsafe { File::from_raw_fd(stdout_fd.into_raw_fd()) });
         stdout.write_all(format!("{}\n", sum).as_bytes()).await?;
     }
 
@@ -136,7 +139,7 @@ pub async fn run_daemon() -> Result<()> {
             }) => {
                 match result {
                     Ok(Ok((bytes, fds))) => {
-                        let archived = unsafe { &*(bytes.as_ptr() as *const Archived<ExecutionContext>) };
+                        let archived = unsafe { rkyv::archived_root::<ExecutionContext>(&bytes) };
                         let context: ExecutionContext = archived.deserialize(&mut rkyv::Infallible)?;
                         tracing::info!("Received command: {} with {} fds", context.command, fds.len());
 
