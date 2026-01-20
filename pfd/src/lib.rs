@@ -115,19 +115,18 @@ pub async fn run_daemon() -> Result<()> {
     let ctrl_c = signal::ctrl_c();
     tokio::pin!(ctrl_c);
 
-    let raw_fd = socket.as_raw_fd();
+    let std_socket = socket.into_std()?;
+    std_socket.set_nonblocking(false)?;
+    let std_socket = Arc::new(std::sync::Mutex::new(std_socket));
 
     loop {
         tokio::select! {
             result = tokio::task::spawn_blocking({
                 let mut buf = [0u8; 16384];
                 let mut fd_storage = [0; 8];
+                let std_socket = Arc::clone(&std_socket);
                 move || {
-                    use std::os::unix::net::UnixDatagram as StdUnixDatagram;
-                    let std_socket = unsafe {
-                        StdUnixDatagram::from(OwnedFd::from_raw_fd(raw_fd))
-                    };
-                    let (n, num_fds) = std_socket.recv_with_fd(&mut buf, &mut fd_storage)?;
+                    let (n, num_fds) = std_socket.lock().unwrap().recv_with_fd(&mut buf, &mut fd_storage)?;
                     let bytes = buf[..n].to_vec();
                     let fds: Vec<OwnedFd> = fd_storage[..num_fds]
                         .iter()
