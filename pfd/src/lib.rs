@@ -22,32 +22,19 @@ type CommandFn = Arc<
         + Sync,
 >;
 
-pub struct CmdRegistry {
+struct CmdRegistryInner {
     commands: HashMap<String, CommandFn>,
 }
 
+#[derive(Clone)]
+pub struct CmdRegistry {
+    inner: Arc<CmdRegistryInner>,
+}
+
 impl CmdRegistry {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> CmdRegistryBuilder {
+        CmdRegistryBuilder {
             commands: HashMap::new(),
-        }
-    }
-
-    pub fn register<F, Fut>(&mut self, name: impl Into<String>, command: F)
-    where
-        F: Fn(ExecutionContext, Vec<OwnedFd>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<()>> + Send + 'static,
-    {
-        let wrapper = Arc::new(move |ctx: ExecutionContext, fds: Vec<OwnedFd>| {
-            Box::pin(command(ctx, fds))
-                as Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
-        });
-        self.commands.insert(name.into(), wrapper);
-    }
-
-    fn clone_ref(&self) -> Self {
-        Self {
-            commands: self.commands.clone(),
         }
     }
 
@@ -58,10 +45,38 @@ impl CmdRegistry {
         fds: Vec<OwnedFd>,
     ) -> Result<()> {
         let handler = self
+            .inner
             .commands
             .get(command)
             .ok_or_else(|| anyhow::anyhow!("Unknown command: {}", command))?;
         handler(ctx, fds).await
+    }
+}
+
+pub struct CmdRegistryBuilder {
+    commands: HashMap<String, CommandFn>,
+}
+
+impl CmdRegistryBuilder {
+    pub fn register<F, Fut>(mut self, name: impl Into<String>, command: F) -> Self
+    where
+        F: Fn(ExecutionContext, Vec<OwnedFd>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<()>> + Send + 'static,
+    {
+        let wrapper = Arc::new(move |ctx: ExecutionContext, fds: Vec<OwnedFd>| {
+            Box::pin(command(ctx, fds))
+                as Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
+        });
+        self.commands.insert(name.into(), wrapper);
+        self
+    }
+
+    pub fn build(self) -> CmdRegistry {
+        CmdRegistry {
+            inner: Arc::new(CmdRegistryInner {
+                commands: self.commands,
+            }),
+        }
     }
 }
 
@@ -118,8 +133,9 @@ pub async fn run_daemon() -> Result<()> {
     let socket = UnixDatagram::bind(&socket_path)?;
     tracing::info!("Listening on {}", socket_path);
 
-    let mut registry = CmdRegistry::new();
-    registry.register("add", add_command);
+    let registry = CmdRegistry::new()
+        .register("add", add_command)
+        .build();
     tracing::info!("Registered commands: add");
 
     let ctrl_c = signal::ctrl_c();
@@ -151,7 +167,7 @@ pub async fn run_daemon() -> Result<()> {
                         tracing::info!("Received command: {} with {} fds", context.command, fds.len());
 
                         let command = context.command.clone();
-                        let registry = registry.clone_ref();
+                        let registry = registry.clone();
                         tokio::spawn(async move {
                             match registry.dispatch(&command, context, fds).await {
                                 Ok(()) => {

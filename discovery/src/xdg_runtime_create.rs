@@ -1,5 +1,5 @@
 use crate::CreateStrategy;
-use directories::UserDirs;
+use directories::BaseDirs;
 use std::path::PathBuf;
 
 pub struct XdgRuntimeCreateStrategy {
@@ -27,8 +27,8 @@ impl CreateStrategy for XdgRuntimeCreateStrategy {
     fn create(&self) -> String {
         let socket_name = self.socket_name.as_deref().unwrap_or("pfd.sock");
 
-        if let Some(user_dirs) = UserDirs::new() {
-            if let Some(runtime_dir) = user_dirs.runtime_dir() {
+        if let Some(base_dirs) = BaseDirs::new() {
+            if let Some(runtime_dir) = base_dirs.runtime_dir() {
                 let socket_path = runtime_dir.join(socket_name);
                 return socket_path.to_string_lossy().to_string();
             }
