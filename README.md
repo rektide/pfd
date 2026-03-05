@@ -12,12 +12,13 @@ Client/server
 What is an execution? What do we transfer?
 
 | **context** | **description** |
+| --- | --- |
 | command | the program name to execute |
 | args | array of arguments |
 | cwd | current working directory |
 | descriptors | array of file descriptors, starting with stdin / stderr / stdout |
 
-Once exection is transfered, all resources are in the daemon's hands, and the client terminates.
+Once execution is transferred, all resources are in the daemon's hands, and the client terminates.
 
 # `pfc` - Small Client Philosophy
 
@@ -28,6 +29,7 @@ We wish to keep the client incredibly small and simple. It's goal is to find the
 To start, pfcdd only has one command:
 
 | command | description |
+| --- | --- |
 | add | add all arguments. complain on stderr. |
 
 # Fd Transfer
