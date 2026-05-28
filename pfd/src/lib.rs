@@ -7,11 +7,10 @@ use sendfd::RecvWithFd;
 use std::collections::HashMap;
 use std::fs::File;
 use std::os::fd::{FromRawFd, IntoRawFd, OwnedFd};
+use std::os::unix::net::UnixDatagram as StdUnixDatagram;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
-use tokio::net::UnixDatagram;
-use tokio::signal;
 
 type CommandFn = Arc<
     dyn Fn(
@@ -122,27 +121,16 @@ async fn add_command(ctx: ExecutionContext, mut fds: Vec<OwnedFd>) -> Result<()>
     Ok(())
 }
 
-pub async fn run_daemon() -> Result<()> {
-    let strategy = LocalFileStrategy::default();
-    let socket_path = strategy.create();
-
-    tracing::info!("Starting pfd daemon on {}", socket_path);
-
-    std::fs::remove_file(&socket_path).ok();
-
-    let socket = UnixDatagram::bind(&socket_path)?;
-    tracing::info!("Listening on {}", socket_path);
+pub async fn child_runner(child_num: u32, std_socket: StdUnixDatagram) {
+    let pid = std::process::id();
+    tracing::info!("Child {child_num} started, pid {pid}");
 
     let registry = CmdRegistry::new()
         .register("add", add_command)
         .build();
-    tracing::info!("Registered commands: add");
 
-    let ctrl_c = signal::ctrl_c();
-    tokio::pin!(ctrl_c);
-
-    let std_socket = Arc::new(std::sync::Mutex::new(socket.into_std()?));
-    std_socket.lock().unwrap().set_nonblocking(true)?;
+    let std_socket = Arc::new(std::sync::Mutex::new(std_socket));
+    std_socket.lock().unwrap().set_nonblocking(true).expect("set nonblocking");
 
     loop {
         tokio::select! {
@@ -162,44 +150,53 @@ pub async fn run_daemon() -> Result<()> {
             }) => {
                 match result {
                     Ok(Ok((bytes, fds))) => {
-                        let context: ExecutionContext = from_bytes::<ExecutionContext, Error>(&bytes)
-                            .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
-                        tracing::info!("Received command: {} with {} fds", context.command, fds.len());
+                        match from_bytes::<ExecutionContext, Error>(&bytes) {
+                            Ok(context) => {
+                                tracing::info!("Child {child_num}: Received command: {} with {} fds", context.command, fds.len());
 
-                        let command = context.command.clone();
-                        let registry = registry.clone();
-                        tokio::spawn(async move {
-                            match registry.dispatch(&command, context, fds).await {
-                                Ok(()) => {
-                                    tracing::debug!("Command '{}' executed successfully", command);
-                                }
-                                Err(e) => {
-                                    tracing::error!("Command '{}' failed: {}", command, e);
-                                }
+                                let command = context.command.clone();
+                                let registry = registry.clone();
+                                tokio::spawn(async move {
+                                    match registry.dispatch(&command, context, fds).await {
+                                        Ok(()) => {
+                                            tracing::debug!("Child {child_num}: Command '{}' executed successfully", command);
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Child {child_num}: Command '{}' failed: {}", command, e);
+                                        }
+                                    }
+                                });
                             }
-                        });
+                            Err(e) => {
+                                tracing::error!("Child {child_num}: Failed to deserialize: {}", e);
+                            }
+                        }
                     }
                     Ok(Err(e)) => {
                         if e.kind() == std::io::ErrorKind::WouldBlock {
                             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-                            } else {
-                            tracing::error!("Receive error: {}", e);
+                        } else {
+                            tracing::error!("Child {child_num}: Receive error: {}", e);
                         }
                     }
                     Err(e) => {
-                        tracing::error!("Task error: {}", e);
+                        tracing::error!("Child {child_num}: Task error: {}", e);
                     }
                 }
             }
-            _ = &mut ctrl_c => {
-                tracing::info!("Received shutdown signal");
-                break;
-            }
         }
     }
+}
 
-    tracing::info!("Cleaning up socket: {}", socket_path);
-    std::fs::remove_file(&socket_path)?;
+pub fn create_socket() -> Result<String> {
+    let strategy = LocalFileStrategy::default();
+    let socket_path = strategy.create();
 
-    Ok(())
+    tracing::info!("Starting pfd daemon on {}", socket_path);
+
+    std::fs::remove_file(&socket_path).ok();
+
+    tracing::info!("Registered commands: add");
+
+    Ok(socket_path)
 }
