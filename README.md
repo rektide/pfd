@@ -1,55 +1,54 @@
-# pre-fork-democli
+# clid
 
-> CLI Demo for rust preforking
+> A Rust framework for building CLI→daemon execution hand-off systems
 
-Client/server
+`clid` lets you build a minimal CLI client that serializes its execution context (command, args, cwd, environment) and file descriptors (stdin/stdout/stderr), sends them over a Unix domain socket to a long-running daemon, and exits. The daemon receives the context and FDs, then dispatches to registered async handlers.
 
-- **`pfd`** - PreFork Cli Demo Daemon, which receives executions from the client
-- **`pfc`** - PreFork Cli Demo Client, which transfers its execution to the daemon
+## Why
 
-# Execution Context
+Keep your client binary tiny and fast. The daemon does the heavy lifting — it's already warm, already initialized, already connected to databases or caches. The client just hands off and gets out of the way.
 
-What is an execution? What do we transfer?
+## Crates
 
-| **context** | **description** |
+| Crate | Description |
 | --- | --- |
-| command | the program name to execute |
-| args | array of arguments |
-| cwd | current working directory |
-| descriptors | array of file descriptors, starting with stdin / stderr / stdout |
+| `clid` | Umbrella crate, re-exports everything |
+| `clid-context` | Serializable execution context (rkyv-based) |
+| `clid-discovery` | Socket discovery strategies (feature-gated: `local`, `xdg`, `env`) |
+| `clid-client` | Client library: serialize context, pass FDs, exit |
+| `clid-daemon` | Daemon library: receive, deserialize, dispatch to async handlers |
 
-Once execution is transferred, all resources are in the daemon's hands, and the client terminates.
+## Execution Context
 
-# `pfc` - Small Client Philosophy
+What gets transferred from client to daemon:
 
-We wish to keep the client incredibly small and simple. It's goal is to find the daemon quickly, transfer the execution context, and close.
-
-# `pfd` - Just a Demo server
-
-To start, pfcdd only has one command:
-
-| command | description |
+| Field | Description |
 | --- | --- |
-| add | add all arguments. complain on stderr. |
+| `command` | Program name to execute |
+| `args` | Argument vector |
+| `working_dir` | Current working directory |
+| `env` | Environment variables |
 
-# Fd Transfer
+Along with file descriptors for stdin, stdout, and stderr.
 
-## Discovery / Rendezvous
+## Discovery
 
-The heart of `pfd` is a sending file descriptors. We send via a socket opened by the daemon.
+The client needs to find the daemon's socket. Strategies are feature-gated so you only compile what you need:
 
-Client has to be able to send it's descriptors. It first finds a unix domain socket, then transfers the execution context & it's file descriptors over it.
+- **`local`** — Look for `clid.sock` (or `.clid.sock`) in the current directory
+- **`env`** — Read from `CLID_SOCKET` environment variable
+- **`xdg`** — Use `$XDG_RUNTIME_DIR/clid.sock`
 
-User can pick among strategies selected from to find the socket to communicate over:
+Priority: CLI argument → env var → local file → XDG runtime dir.
 
-1. `./pfd.sock` mode, look right here. Also accepts `.pfd.sock`.
-2. xdg mode, using user runtime dir for pdf.sock
-3. xdg-project mode, which has a project name middle-fix for the socket, eg `${XDG_RUNTIME_DIR}/pfd.pfd-demo.sock`
+## Example
 
-# Todo
+See `examples/clidd` (reference daemon) and `examples/clidc` (reference client) for a working example.
 
-- Auto-launch daemon into background (`--create/-C` option)
-- Discovery, look for pid (process id) file in XDG compliant locations.
-- "XDG"++ app-name support
-- sd-notify support on descriptor 4.
-- miniaturize client even more
+## Optional: Prefork
+
+The `clid-daemon` crate has an optional `prefork` feature (powered by the [`prefork`](https://crates.io/crates/prefork) crate) that forks worker processes. Without it, the daemon uses tokio async tasks.
+
+## License
+
+MIT OR Apache-2.0
