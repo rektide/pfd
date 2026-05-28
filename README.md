@@ -8,6 +8,33 @@
 
 Keep your client binary tiny and fast. The daemon does the heavy lifting — it's already warm, already initialized, already connected to databases or caches. The client just hands off and gets out of the way.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    C[clidc<br/>client] -->|serialize context<br/>+ send FDs| S[Unix datagram<br/>socket]
+    S -->|recv +<br/>deserialize| D[clidd<br/>daemon worker]
+    D -->|dispatch| H1[handler A]
+    D -->|dispatch| H2[handler B]
+    D -->|dispatch| HN[handler ...]
+```
+
+```mermaid
+flowchart TB
+    subgraph Client
+        CC[CLI args] --> CX[ExecutionContext]
+        CX --> CS[rkyv serialize]
+    end
+    subgraph Transport
+        CS -->|send_with_fd| SK[Unix datagram<br/>socket]
+    end
+    subgraph Daemon
+        SK -->|recv_with_fd| RX[rkyv deserialize]
+        RX --> CR[CmdRegistry]
+        CR --> H[registered<br/>async handler]
+    end
+```
+
 ## Crates
 
 | Crate | Description |
@@ -48,6 +75,18 @@ See `examples/clidd` (reference daemon) and `examples/clidc` (reference client) 
 ## Optional: Prefork
 
 The `clid-daemon` crate has an optional `prefork` feature (powered by the [`prefork`](https://crates.io/crates/prefork) crate) that forks worker processes. Without it, the daemon uses tokio async tasks.
+
+## Feature Flags
+
+| Feature | `clid` | `clid-discovery` | `clid-daemon` | `clid-context` | Description |
+| --- | --- | --- | --- | --- | --- |
+| `local` | ✓ forwards | ✓ enables | ✓ enables socket creation | — | Local file socket discovery |
+| `env` | ✓ forwards | ✓ enables | — | — | Environment variable socket discovery |
+| `xdg` | ✓ forwards | ✓ enables | — | — | XDG runtime dir socket discovery |
+| `prefork` | ✓ forwards | — | ✓ enables | — | Preforked worker processes via `prefork` crate |
+| `check-bytes` | ✓ forwards | — | — | ✓ enables | rkyv byte validation |
+
+All features default to off on individual crates. The `clid` umbrella crate enables `local`, `xdg`, and `env` by default.
 
 ## License
 
