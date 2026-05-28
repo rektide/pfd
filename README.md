@@ -51,4 +51,4 @@ The `clid-daemon` crate has an optional `prefork` feature (powered by the [`pref
 
 ## License
 
-MIT OR Apache-2.0
+Apache-2.0
